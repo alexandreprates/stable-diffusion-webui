@@ -85,6 +85,7 @@ class StyleDatabase:
         self.styles = {}
         self.paths = paths
         self.all_styles_files: list[Path] = []
+        self.style_dividers: dict[str, str] = {}
 
         folder, file = os.path.split(self.paths[0])
         if '*' in file or '?' in file:
@@ -104,6 +105,7 @@ class StyleDatabase:
         matching the path used to initialize the database.
         """
         self.styles.clear()
+        self.style_dividers.clear()
 
         # scans for all styles files
         all_styles_files = []
@@ -126,8 +128,36 @@ class StyleDatabase:
                 # '---------------- STYLES ----------------'
                 divider = f' {styles_file.stem.upper()} '.center(40, '-')
                 self.styles[divider] = PromptStyle(f"{divider}", None, None, "do_not_save")
+                self.style_dividers[str(styles_file)] = divider
             if styles_file.is_file():
                 self.load_from_csv(styles_file)
+
+    def sorted_style_names(self) -> list[str]:
+        """
+        Returns style names for display, sorted alphabetically (case-insensitive).
+        When styles come from several files, each file's styles stay grouped
+        under that file's divider, and the files keep their load order.
+        """
+        divider_names = set(self.style_dividers.values())
+
+        groups: dict[str, list[str]] = {}
+        for name, style in self.styles.items():
+            if name in divider_names:
+                continue
+            groups.setdefault(style.path or str(self.default_path), []).append(name)
+
+        result = []
+        for styles_file in self.all_styles_files:
+            path = str(styles_file)
+            if path in self.style_dividers:
+                result.append(self.style_dividers[path])
+            result.extend(sorted(groups.pop(path, []), key=str.casefold))
+
+        # styles whose path doesn't match any loaded file
+        for names in groups.values():
+            result.extend(sorted(names, key=str.casefold))
+
+        return result
 
     def load_from_csv(self, path: str | Path):
         try:
